@@ -1,0 +1,99 @@
+#!usr/bin/env bash
+
+###############################################################################
+# Script to get errors logged since the last time we checked
+# Usage:
+# geterrors  -p logPath
+###############################################################################
+
+# exit on failure
+set -e
+# http://apple.stackexchange.com/questions/68684/why-sh-c-echo-n-1-is-different-from-bash-c-echo-n-1
+shopt -u xpg_echo
+
+usage() {
+  cat << EOF
+Usage: $0 -p <logPath>
+
+This script will check a file for the last modification.  It will then check for any errors since the last modification and send them to stdout.
+Requres pygtail to be install on the executing machine.
+
+OPTIONS:
+   -h             Show this message
+   -p             Log path (Required)
+   -d             debug
+   -n             DryRun (No action)
+EOF
+}
+
+while getopts "hp:dn" OPTION; do
+  case $OPTION in
+    h) usage; exit 1;;
+    p) LOGPATH=$OPTARG;;
+    d) DEBUG=true;;
+    n) DRYRUN=$OPTARG;;
+    [?]) usage; exit;;
+  esac
+done
+
+
+# check for required args
+if [[ -z "$LOGPATH" ]]; then
+    echo "Logpath value: $LOGPATH"
+    echo "Missing log path"
+    exit 1
+fi
+
+# Validate that pygtail is intalled
+INSTALLED=$(hash pygtail 2>/dev/null || echo "false")
+
+if [[ "$INSTALLED" = false ]]; then
+  echo "pygtail is not installed.  Install pygtail with \"pip install pygtail\""
+  exit 1
+fi
+
+if [[ ! "$INSTALLED" = false ]]; then
+  INSTALLED=true
+fi
+
+# Print debug information if requested
+if [[ "$DEBUG" = true ]]; then
+    echo " "
+    echo " "
+    echo "Input information"
+    echo "-----------------"
+    echo "Log path: $LOGPATH"
+    echo "pygtail installed: $INSTALLED"
+fi
+
+# Check if file exists
+if [[ ! -e "$LOGPATH" ]]; then
+    echo "Log path provided does not exist"
+    exit 1
+fi
+
+# If not a dryrun operation, do work.
+if [[ -z "$DRYRUN" || "$DRYRUN" = false ]]; then
+
+  # Change working directory to the log path
+  cd "$(dirname "$LOGPATH")"
+
+  # Get the basename of the file
+  FILENAME=$(basename "$LOGPATH")
+
+  # Get log info.  Pygtail is called without any additional options at this time.
+  LOGINFO=$(pygtail "$FILENAME")
+
+  #Check if no log info was returned, let user know if in debug mode
+  if [[ -z "$LOGINFO" && "$DEBUG" = true ]]; then
+    echo "No logs to return for" " $LOGPATH"
+  fi
+
+  #If log info was returned, print a header and the log info
+  if [[ ! -z "$LOGINFO" ]]; then
+    echo "Log info for path" "$LOGPATH"
+    echo "-------------------------------------------------------------------------"
+    grep ERROR "$LOGPATH"
+  fi
+  exit 0
+fi
